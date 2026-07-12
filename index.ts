@@ -38,7 +38,7 @@ app.get("/", (req: Request, res: Response) => {
 });
 //----------------------------------
 
-//Post __AddTour  
+//Post __AddTour
 app.post("/api/add-tours", async (req: Request, res: Response) => {
   const tour = req.body;
   const result = await addTourCollection.insertOne(tour);
@@ -47,43 +47,69 @@ app.post("/api/add-tours", async (req: Request, res: Response) => {
 
 // Get -AddedTours data ... ///---->>> Has SomeChangees -After added [filter by Srarch & pagination] __--,,
 app.get("/api/add-tours", async (req: Request, res: Response) => {
-   const { search, category, minPrice, maxPrice, sort } = req.query as Record<string, string>;
-   const page = parseInt(req.query.page as string) || 1;
+  const { search, category, minPrice, maxPrice, sort } = req.query as Record<
+    string,
+    string
+  >;
+  const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 8;
 
-   const query: Record<string, unknown> = {};
-  if (search) query.$or = [{ title: { $regex: search, $options: "i" } }, { destination: { $regex: search, $options: "i" } }];
+  const query: Record<string, unknown> = {};
+  if (search)
+    query.$or = [
+      { title: { $regex: search, $options: "i" } },
+      { destination: { $regex: search, $options: "i" } },
+    ];
   if (category && category !== "All") query.category = category;
-  if (minPrice || maxPrice) query.price = { ...(minPrice && { $gte: +minPrice }), ...(maxPrice && { $lte: +maxPrice }) };
+  if (minPrice || maxPrice)
+    query.price = {
+      ...(minPrice && { $gte: +minPrice }),
+      ...(maxPrice && { $lte: +maxPrice }),
+    };
 
-   const sortMap: Record<string, Record<string, 1 | -1>> = {
+  const sortMap: Record<string, Record<string, 1 | -1>> = {
     price_asc: { price: 1 },
     price_desc: { price: -1 },
     rating: { rating: -1 },
   };
-   const sortOption = sortMap[sort] || { _id: -1 };
+  const sortOption = sortMap[sort] || { _id: -1 };
 
-   const total = await addTourCollection.countDocuments(query);
-   
-  const tours = await addTourCollection.find(query).sort(sortOption).skip((page - 1) * limit).limit(limit).toArray();
+  const total = await addTourCollection.countDocuments(query);
+
+  const tours = await addTourCollection
+    .find(query)
+    .sort(sortOption)
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .toArray();
   res.send({ tours, total, page, totalPages: Math.ceil(total / limit) });
 });
 
-
 // Get -- Latest 6 Tours (for Home page "Latest Tours" section)
 app.get("/api/add-tours/latest", async (req: Request, res: Response) => {
-  
-    const tours = await addTourCollection
-      .find()
-      .sort({ _id: -1 })
-      .limit(6)
-      .toArray();
- 
-    res.send(tours);
+  const tours = await addTourCollection
+    .find()
+    .sort({ _id: -1 })
+    .limit(6)
+    .toArray();
+
+  res.send(tours);
 });
- 
+
+// GET - শুধু নির্দিষ্ট user এর পোস্ট করা Tours (Manage Tours page এর জন্য)
+// এই route /:id এর আগে থাকতেই হবে
+app.get("/api/add-tours/user/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const tours = await addTourCollection
+    .find({ createdBy: userId })
+    .sort({ _id: -1 })
+    .toArray();
+  res.send(tours);
+});
 
 
+
+//------------Sobar pore rakte hobe  /:id ke-----__-___-----
 // Get -AddedTours Detaislpage ByID ...
 app.get("/api/add-tours/:id", async (req: Request, res: Response) => {
   const id = req.params.id as string;
@@ -98,10 +124,59 @@ app.get("/api/add-tours/:id", async (req: Request, res: Response) => {
     return res.status(404).send({ error: "Tour not found" });
   }
   res.send(tour);
-
 });
 
+//---------------------
+// PATCH - Update tour (শুধু owner পারবে)
+app.patch("/api/add-tours/:id", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { userId, ...updateData } = req.body;
 
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ error: "Invalid tour ID" });
+  }
+
+  const tour = await addTourCollection.findOne({ _id: new ObjectId(id) });
+
+  if (!tour) {
+    return res.status(404).send({ error: "Tour not found" });
+  }
+
+  if (tour.createdBy !== userId) {
+    return res.status(403).send({ error: "You can only edit your own tours" });
+  }
+
+  const result = await addTourCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updateData }
+  );
+
+  res.send(result);
+});
+
+// DELETE - Delete tour (শুধু owner পারবে)
+app.delete("/api/add-tours/:id", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const userId = req.query.userId as string;
+
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ error: "Invalid tour ID" });
+  }
+
+  const tour = await addTourCollection.findOne({ _id: new ObjectId(id) });
+
+  if (!tour) {
+    return res.status(404).send({ error: "Tour not found" });
+  }
+
+  if (tour.createdBy !== userId) {
+    return res.status(403).send({ error: "You can only delete your own tours" });
+  }
+
+  const result = await addTourCollection.deleteOne({ _id: new ObjectId(id) });
+
+  res.send(result);
+});
 
 //-----------------------------------
 connectToMongoDB().then(() => {
