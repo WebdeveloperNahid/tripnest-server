@@ -38,18 +38,51 @@ app.get("/", (req: Request, res: Response) => {
 });
 //----------------------------------
 
-//Post __AddTour
+//Post __AddTour  
 app.post("/api/add-tours", async (req: Request, res: Response) => {
   const tour = req.body;
   const result = await addTourCollection.insertOne(tour);
   res.send(result);
 });
 
-// Get -AddedTours data ...
+// Get -AddedTours data ... ///---->>> Has SomeChangees -After added [filter by Srarch & pagination] __--,,
 app.get("/api/add-tours", async (req: Request, res: Response) => {
-  const tours = await addTourCollection.find().toArray();
-  res.send(tours);
+   const { search, category, minPrice, maxPrice, sort } = req.query as Record<string, string>;
+   const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 8;
+
+   const query: Record<string, unknown> = {};
+  if (search) query.$or = [{ title: { $regex: search, $options: "i" } }, { destination: { $regex: search, $options: "i" } }];
+  if (category && category !== "All") query.category = category;
+  if (minPrice || maxPrice) query.price = { ...(minPrice && { $gte: +minPrice }), ...(maxPrice && { $lte: +maxPrice }) };
+
+   const sortMap: Record<string, Record<string, 1 | -1>> = {
+    price_asc: { price: 1 },
+    price_desc: { price: -1 },
+    rating: { rating: -1 },
+  };
+   const sortOption = sortMap[sort] || { _id: -1 };
+
+   const total = await addTourCollection.countDocuments(query);
+   
+  const tours = await addTourCollection.find(query).sort(sortOption).skip((page - 1) * limit).limit(limit).toArray();
+  res.send({ tours, total, page, totalPages: Math.ceil(total / limit) });
 });
+
+
+// Get -- Latest 6 Tours (for Home page "Latest Tours" section)
+app.get("/api/add-tours/latest", async (req: Request, res: Response) => {
+  
+    const tours = await addTourCollection
+      .find()
+      .sort({ _id: -1 })
+      .limit(6)
+      .toArray();
+ 
+    res.send(tours);
+});
+ 
+
 
 // Get -AddedTours Detaislpage ByID ...
 app.get("/api/add-tours/:id", async (req: Request, res: Response) => {
@@ -67,6 +100,8 @@ app.get("/api/add-tours/:id", async (req: Request, res: Response) => {
   res.send(tour);
 
 });
+
+
 
 //-----------------------------------
 connectToMongoDB().then(() => {
