@@ -104,14 +104,14 @@ app.get("/", (req: Request, res: Response) => {
 
 //----------------------------------
 //Post __AddTour
-app.post("/api/add-tours", async (req: Request, res: Response) => {
+app.post("/api/add-tours",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
   const tour = req.body;
   const result = await addTourCollection.insertOne(tour);
   res.send(result);
 });
 
 // Get -AddedTours data ... ///---->>> Has SomeChangees -After added [filter by Srarch & pagination] __--,,
-app.get("/api/add-tours",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
+app.get("/api/add-tours",verifyToken,  async (req: Request, res: Response) => {
   const { search, category, minPrice, maxPrice, sort } = req.query as Record<
     string,
     string
@@ -176,14 +176,14 @@ app.get("/api/add-tours/user/:userId", async (req: Request, res: Response) => {
 
 //------------Sobar pore rakte hobe  /:id ke-----__-___-----
 // Get -AddedTours Detaislpage ByID ...
-app.get("/api/add-tours/:id", async (req: Request, res: Response) => {
+app.get("/api/add-tours/:id",verifyToken,  async (req: Request, res: Response) => {
   const id = req.params.id as string;
 
   if (!ObjectId.isValid(id)) {
     return res.status(400).send({ error: "Invalid tour ID" });
   }
   const tour = await addTourCollection.findOne({ _id: new ObjectId(id) });
-  res.send(tour);
+  
 
   if (!tour) {
     return res.status(404).send({ error: "Tour not found" });
