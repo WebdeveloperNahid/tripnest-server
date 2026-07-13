@@ -18,8 +18,8 @@ const uri = process.env.MONGO_DB_URI as string;
 const client = new MongoClient(uri);
 
 let addTourCollection!: Collection;
-let userCollection!: Collection;       // <-- নতুন যোগ
-let sessionCollection!: Collection;    // <-- নতুন যোগ
+let userCollection!: Collection;      
+let sessionCollection!: Collection;   
 
 async function connectToMongoDB() {
   try {
@@ -28,8 +28,8 @@ async function connectToMongoDB() {
     const database = client.db("tripnest");
     addTourCollection = database.collection("add-tours");
 
-    userCollection = database.collection("user");       // <-- নতুন যোগ
-    sessionCollection = database.collection("session");  // <-- নতুন যোগ
+    userCollection = database.collection("user");      
+    sessionCollection = database.collection("session"); 
 
     console.log("You successfully connected to MongoDB!");
   } catch (err) {
@@ -42,7 +42,7 @@ app.get("/", (req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-// ---- Auth Middleware (নতুন যোগ, তোমার পুরনো প্রজেক্টের লজিক) ----
+// ---- Auth Middleware  ----
 declare global {
   namespace Express {
     interface Request {
@@ -244,8 +244,14 @@ app.delete("/api/add-tours/:id", async (req: Request, res: Response) => {
 });
 
 //-----------------------------------
-connectToMongoDB().then(() => {
-  app.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
+if (process.env.NODE_ENV !== "production") {
+  connectToMongoDB().then(() => {
+    app.listen(port, () => {
+      console.log(`Example app listening on port ${port}`);
+    });
   });
-});
+} else {
+  connectToMongoDB();
+}
+
+export default app;
