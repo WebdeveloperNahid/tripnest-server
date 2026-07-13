@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { Collection, MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -18,6 +18,8 @@ const uri = process.env.MONGO_DB_URI as string;
 const client = new MongoClient(uri);
 
 let addTourCollection!: Collection;
+let userCollection!: Collection;       // <-- নতুন যোগ
+let sessionCollection!: Collection;    // <-- নতুন যোগ
 
 async function connectToMongoDB() {
   try {
@@ -25,6 +27,9 @@ async function connectToMongoDB() {
 
     const database = client.db("tripnest");
     addTourCollection = database.collection("add-tours");
+
+    userCollection = database.collection("user");       // <-- নতুন যোগ
+    sessionCollection = database.collection("session");  // <-- নতুন যোগ
 
     console.log("You successfully connected to MongoDB!");
   } catch (err) {
@@ -36,8 +41,68 @@ async function connectToMongoDB() {
 app.get("/", (req: Request, res: Response) => {
   res.send("Hello World!");
 });
+
+// ---- Auth Middleware (নতুন যোগ, তোমার পুরনো প্রজেক্টের লজিক) ----
+declare global {
+  namespace Express {
+    interface Request {
+      user?: Record<string, unknown>;
+    }
+  }
+}
+
+const verifyToken = async (req: Request, res: Response, next: NextFunction) => {
+  console.log("headers", req.headers);
+  const authHeader = req.headers?.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(404).send({ message: "unauthorized access" });
+  }
+  const query = { token: token };
+  const session = await sessionCollection.findOne(query);
+
+  if (!session) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  const userId = session.userId;
+  const userQuery = { _id: userId };
+  const user = await userCollection.findOne(userQuery);
+  console.log(userId, "usr id of the session ", user);
+
+  if (!user) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  req.user = user;
+  next();
+};
+
+const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.role !== "user") {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+  next();
+};
+
+const verifyAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).send({ message: "forbidden access" });
+  }
+  next();
+};
+// ---- Auth Middleware শেষ ----
+
+// Routes
+app.get("/", (req: Request, res: Response) => {
+  res.send("Hello World!");
+});
 //----------------------------------
 
+//----------------------------------
 //Post __AddTour
 app.post("/api/add-tours", async (req: Request, res: Response) => {
   const tour = req.body;
@@ -46,7 +111,7 @@ app.post("/api/add-tours", async (req: Request, res: Response) => {
 });
 
 // Get -AddedTours data ... ///---->>> Has SomeChangees -After added [filter by Srarch & pagination] __--,,
-app.get("/api/add-tours", async (req: Request, res: Response) => {
+app.get("/api/add-tours",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
   const { search, category, minPrice, maxPrice, sort } = req.query as Record<
     string,
     string
