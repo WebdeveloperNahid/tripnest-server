@@ -250,8 +250,6 @@ if (process.env.NODE_ENV !== "production") {
       console.log(`Example app listening on port ${port}`);
     });
   });
-} else {
-  connectToMongoDB();
-}
+} 
 
 export default app;
