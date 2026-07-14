@@ -244,6 +244,19 @@ app.delete("/api/add-tours/:id", async (req: Request, res: Response) => {
 });
 
 //-----------------------------------
+// if (process.env.NODE_ENV !== "production") {
+//   connectToMongoDB().then(() => {
+//     app.listen(port, () => {
+//       console.log(`Example app listening on port ${port}`);
+//     });
+//   });
+// } else {
+//   connectToMongoDB();
+// }
+
+// export default app;
+
+//-----------------------------------
 if (process.env.NODE_ENV !== "production") {
   connectToMongoDB().then(() => {
     app.listen(port, () => {
