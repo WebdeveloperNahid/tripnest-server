@@ -18,24 +18,44 @@ const uri = process.env.MONGO_DB_URI as string;
 const client = new MongoClient(uri);
 
 let addTourCollection!: Collection;
-let userCollection!: Collection;      
-let sessionCollection!: Collection;   
+let userCollection!: Collection;
+let sessionCollection!: Collection;
+
+let isConnected = false;
+let connectionPromise: Promise<void> | null = null;
 
 async function connectToMongoDB() {
-  try {
-    await client.connect();
+  if (isConnected) return;
+  if (connectionPromise) return connectionPromise;
 
-    const database = client.db("tripnest");
-    addTourCollection = database.collection("add-tours");
+  connectionPromise = (async () => {
+    try {
+      await client.connect();
+      const database = client.db("tripnest");
+      addTourCollection = database.collection("add-tours");
+      userCollection = database.collection("user");
+      sessionCollection = database.collection("session");
+      isConnected = true;
+      console.log("You successfully connected to MongoDB!");
+    } catch (err) {
+      console.dir(err);
+      connectionPromise = null;
+      throw err;
+    }
+  })();
 
-    userCollection = database.collection("user");      
-    sessionCollection = database.collection("session"); 
-
-    console.log("You successfully connected to MongoDB!");
-  } catch (err) {
-    console.dir(err);
-  }
+  return connectionPromise;
 }
+
+// প্রতিটা রিকোয়েস্টের আগে DB কানেকশন নিশ্চিত করা হচ্ছে
+app.use(async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await connectToMongoDB();
+    next();
+  } catch (err) {
+    res.status(500).send({ error: "Database connection failed" });
+  }
+});
 
 // Routes
 app.get("/", (req: Request, res: Response) => {
@@ -104,14 +124,19 @@ app.get("/", (req: Request, res: Response) => {
 
 //----------------------------------
 //Post __AddTour
-app.post("/api/add-tours",verifyToken,verifyAdmin, async (req: Request, res: Response) => {
-  const tour = req.body;
-  const result = await addTourCollection.insertOne(tour);
-  res.send(result);
-});
+app.post(
+  "/api/add-tours",
+  verifyToken,
+  verifyAdmin,
+  async (req: Request, res: Response) => {
+    const tour = req.body;
+    const result = await addTourCollection.insertOne(tour);
+    res.send(result);
+  },
+);
 
 // Get -AddedTours data ... ///---->>> Has SomeChangees -After added [filter by Srarch & pagination] __--,,
-app.get("/api/add-tours",verifyToken,  async (req: Request, res: Response) => {
+app.get("/api/add-tours", verifyToken, async (req: Request, res: Response) => {
   const { search, category, minPrice, maxPrice, sort } = req.query as Record<
     string,
     string
@@ -172,24 +197,25 @@ app.get("/api/add-tours/user/:userId", async (req: Request, res: Response) => {
   res.send(tours);
 });
 
-
-
 //------------Sobar pore rakte hobe  /:id ke-----__-___-----
 // Get -AddedTours Detaislpage ByID ...
-app.get("/api/add-tours/:id",verifyToken,  async (req: Request, res: Response) => {
-  const id = req.params.id as string;
+app.get(
+  "/api/add-tours/:id",
+  verifyToken,
+  async (req: Request, res: Response) => {
+    const id = req.params.id as string;
 
-  if (!ObjectId.isValid(id)) {
-    return res.status(400).send({ error: "Invalid tour ID" });
-  }
-  const tour = await addTourCollection.findOne({ _id: new ObjectId(id) });
-  
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid tour ID" });
+    }
+    const tour = await addTourCollection.findOne({ _id: new ObjectId(id) });
 
-  if (!tour) {
-    return res.status(404).send({ error: "Tour not found" });
-  }
-  res.send(tour);
-});
+    if (!tour) {
+      return res.status(404).send({ error: "Tour not found" });
+    }
+    res.send(tour);
+  },
+);
 
 //---------------------
 // PATCH - Update tour (শুধু owner পারবে)
@@ -213,7 +239,7 @@ app.patch("/api/add-tours/:id", async (req: Request, res: Response) => {
 
   const result = await addTourCollection.updateOne(
     { _id: new ObjectId(id) },
-    { $set: updateData }
+    { $set: updateData },
   );
 
   res.send(result);
@@ -235,7 +261,9 @@ app.delete("/api/add-tours/:id", async (req: Request, res: Response) => {
   }
 
   if (tour.createdBy !== userId) {
-    return res.status(403).send({ error: "You can only delete your own tours" });
+    return res
+      .status(403)
+      .send({ error: "You can only delete your own tours" });
   }
 
   const result = await addTourCollection.deleteOne({ _id: new ObjectId(id) });
@@ -243,18 +271,6 @@ app.delete("/api/add-tours/:id", async (req: Request, res: Response) => {
   res.send(result);
 });
 
-//-----------------------------------
-// if (process.env.NODE_ENV !== "production") {
-//   connectToMongoDB().then(() => {
-//     app.listen(port, () => {
-//       console.log(`Example app listening on port ${port}`);
-//     });
-//   });
-// } else {
-//   connectToMongoDB();
-// }
-
-// export default app;
 
 //-----------------------------------
 if (process.env.NODE_ENV !== "production") {
